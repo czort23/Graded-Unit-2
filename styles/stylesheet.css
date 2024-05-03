@@ -1,0 +1,213 @@
+@import url('https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC&display=swap');
+
+/*navbar*/
+.active {
+    color: green;
+}
+
+.nav-link:hover {
+    color: green;
+}
+
+.dropdown-item.active, .dropdown-item:active {
+    background-color:green;
+}
+
+/*search bar results*/
+#item-list {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    list-style-type: none;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 5px 10px;
+    position: absolute;
+    z-index: 999;
+}
+
+/*input field focus ring color*/
+.focus-ring:focus {
+    --bs-focus-ring-color: rgba(var(--bs-success-rgb), .25);
+}
+
+.form-check-input:checked {
+    background-color: green;
+    border-color: green;
+}
+
+/*main poster, page title, highlighted section*/
+.main-poster {
+    color: white;
+    position: relative;
+    text-align: center;
+}
+
+.centered-title {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-shadow: 1px 1px 6px black;
+}
+
+.mission-section {
+    display: block;
+    background-color: rgb(242, 237, 237);
+}
+
+/*typography*/
+h1 {
+    text-transform: uppercase;
+}
+
+h5, h6 {
+    font-family: "Alegreya Sans SC", sans-serif;
+}
+
+.upper {
+    text-transform: uppercase;
+}
+
+.centered {
+    text-align: center;
+}
+
+.table-of-content {
+    margin: 0 auto;
+}
+
+/*links*/
+a {
+    color: #000;
+}
+
+a:hover, a:hover.search-result {
+    color: green;
+}
+
+a.search-result {
+    color: #000;
+}
+
+.footnav-black {
+    color: #fff;
+}
+
+.footnav-white {
+    color: #000;
+}
+
+/*images*/
+img.rounded {
+    border-radius: 5px;
+}
+
+/*footer*/
+.footer-black {
+    background-color: #000;
+    color: #fff;
+    text-align: center;
+    padding: 10px 0;
+}
+
+.footer-white {
+    text-align: center;
+    padding: 10px 0;
+}
+
+/*accordion*/
+.accordion-button {
+    outline: none;
+    box-shadow: none !important;
+    border-color: transparent !important;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: green;
+    color: white;
+}
+
+/*green calculator*/
+table, th, td {
+    border: 1px solid;
+    border-collapse: collapse;
+    border-color: grey;
+    border-radius: 2px;
+    padding: 5px;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+}
+
+td {
+    width: 50px;
+}
+
+td:not(.score):hover {
+    background-color: #E8E8E8 !important;
+    cursor: pointer;
+}
+
+/*carousel*/
+.carousel-section {
+    background-color: black;
+    color: white;
+    text-align: center;
+    padding: 10px;
+}
+
+.carousel-image {
+    max-width: 50%;
+    height: auto;
+    border-radius: 50%;
+    margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+    .carousel-inner .carousel-item > div {
+        display: none;
+    }
+    .carousel-inner .carousel-item > div:first-child {
+        display: block;
+    }
+}
+
+.carousel-inner .carousel-item.active,
+.carousel-inner .carousel-item-next,
+.carousel-inner .carousel-item-prev {
+    display: flex;
+}
+
+/*carousel medium and up screens*/
+@media (min-width: 768px) {
+    
+    .carousel-inner .carousel-item-end.active,
+    .carousel-inner .carousel-item-next {
+    transform: translateX(25%);
+    }
+    
+    .carousel-inner .carousel-item-start.active, 
+    .carousel-inner .carousel-item-prev {
+    transform: translateX(-25%);
+    }
+
+    .carousel-inner .carousel-item-end,
+    .carousel-inner .carousel-item-start { 
+    transform: translateX(0);
+    }
+}
+
+/*other elements*/
+hr {
+    width: 98%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media (max-width: 991px) {
+    .vr-signup {
+        display: none;
+    }
+}
