@@ -12,7 +12,7 @@ if(!loggedIn()) {
 $company_id = $_SESSION['user_id'];
 
 //sql query for the navbar search bar
-$sql1 = "SELECT company_id, company_name FROM users";
+$sql1 = "SELECT company_id, company_name FROM users WHERE company_id != 1";
 $result1 = $conn -> query($sql1);
 
 //sql query to show user's payment cards in the purchase section
@@ -74,11 +74,21 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         $billing_address = $_POST['billing_address'];
         $billing_city = $_POST['billing_city'];
         $billing_postcode = $_POST['billing_postcode'];
-    
-        $stmt -> execute();
-        header('Location: account.php');
-        exit();
-        
+
+        $current_date = date('Y-m-d');
+
+        if($current_date > $expiration_date) {
+
+            $msg = '<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-circle"></i> Your card is expired.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>';
+        } else {
+
+            $stmt -> execute();
+            header('Location: account.php');
+            exit();
+        }       
     } elseif(isset($_POST['add_new_card'])) {
   
         $stmt = $conn -> prepare("INSERT INTO payment_details (company_id, name_on_card, card_number, cvv, expiration_date, billing_address, billing_city, billing_postcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -95,9 +105,20 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         $billing_city = $_POST['billing_city'];
         $billing_postcode = $_POST['billing_postcode'];
 
-        $stmt -> execute();
-        header('Location: account.php');
-        exit();
+        $current_date = date('Y-m-d');
+
+        if($current_date > $expiration_date) {
+
+            $msg = '<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-circle"></i> Your card is expired.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>';
+        } else {
+
+            $stmt -> execute();
+            header('Location: account.php');
+            exit();
+        }   
 
     } elseif(isset($_POST['delete_card'])) {
 
@@ -191,17 +212,26 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         } else {
 
-            $stmt1 = $conn -> prepare("UPDATE users SET points=? WHERE company_id = $company_id");
-            $stmt1 -> bind_param("s", $total_points);
+            $year = date('Y');
+            $reward_desc = $year . ' Certificate';
 
-            $stmt2 = $conn -> prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
-            $stmt2 -> bind_param("iiid", $company_id, $payment_id, $amount, $price);
-            
-            $stmt1 -> execute();
-            $stmt2 -> execute();
+            $stmt1 = $conn->prepare("UPDATE users SET points=? WHERE company_id=?");
+            $stmt1->bind_param("ii", $total_points, $company_id);
+            $stmt1->execute();
+
+            $stmt2 = $conn->prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
+            $stmt2->bind_param("iiid", $company_id, $payment_id, $amount, $price);
+            $stmt2->execute();
+
+            //retrieves the auto-generated order_id
+            $order_id = $conn->insert_id;
+
+            $stmt3 = $conn->prepare("INSERT INTO rewards (company_id, order_id, type, reward) VALUES (?, ?, 'certificate', ?)");
+            $stmt3->bind_param("iis", $company_id, $order_id, $reward_desc);
+            $stmt3->execute();
 
             $msg = '<div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account.
+                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account. Check out your <a href="company_details.php?company_id='.$company_id.'#rewards">REWARDS</a>!
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>';
         }
@@ -311,6 +341,9 @@ $conn -> close();
                             <i class="bi-person-circle" style="font-size: 1.25rem;" alt="My Account"></i>
                         </a>
                         <ul class="dropdown-menu">
+                            <?php if(isset($company_id) && ($company_id == 1)): ?>
+                                <li><a class="dropdown-item" href="admin_panel.php">Admin Panel</a></li>
+                            <?php endif; ?>
                             <li><a class="dropdown-item active" href="#">Account</a></li>
                             <li><a class="dropdown-item" data-bs-toggle="offcanvas" href="#purchaseOffcanvas" role="button" aria-controls="purchaseOffcanvas">Purchase Points</a></li>
                             <li><a class="dropdown-item" href="order_history.php">Order History</a></li>
@@ -335,7 +368,7 @@ $conn -> close();
                 <?php if(isset($msg)) { ?>
                     <?php echo $msg; ?>
                 <?php } ?>
-                <button type="button" class="btn btn-light float-end" data-bs-toggle="modal" data-bs-target="#calculator_modal">
+                <button type="button" class="btn btn-light float-end" data-bs-toggle="modal" data-bs-target="#calculator_modal" <?php if($company['subscription'] == 'Deactivated') : ?>disabled<?php endif; ?>>
                     <i class="bi bi-calculator" style="font-size: 1rem"></i>
                 </button>
                 <h4>Green Points</h4>
@@ -344,6 +377,7 @@ $conn -> close();
                     Your points: <?php echo $company['points'];?>/100
                     <input type="hidden" id="points_check" value="<?php echo $company['points'];?>">
                 </div>
+                <p>Check out your <a href="company_details.php?company_id=<?php echo $company_id ?>">REWARDS</a>!</p>
                 <p style="font-size:12px">Find out more: <a href="green_points.php">Green Points</a>, <a href="sustainability_rubric.php">Rubric</a>.
                 <br>
                 <button type="button" class="btn btn-light float-end" id="update_account_btn">
@@ -373,7 +407,7 @@ $conn -> close();
                     <div class="row mb-3">
                         <label for="contact_number" class="col-sm-4 col-form-label">Contact Number:</label>
                         <div class="col-sm-8">
-                            <input type="text" class="form-control updateAccount focus-ring" id="contact_number" name="contact_number" value="<?php echo $company['contact_number'];?>" required disabled>
+                            <input type="text" class="form-control updateAccount focus-ring" id="contact_number" name="contact_number" pattern="[0-9]{11}" value="<?php echo $company['contact_number'];?>" required disabled>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -477,7 +511,7 @@ $conn -> close();
                             <div class="row mb-3">
                                 <label for="card_number" class="col-sm-4 col-form-label">Card Number:</label>
                                 <div class="col-sm-8">
-                                    <input type="text" class="form-control focus-ring update_card<?php echo $i;?>" id="card_number" name="card_number" value="<?php echo $row['card_number'];?>" required disabled>
+                                    <input type="text" class="form-control focus-ring update_card<?php echo $i;?>" id="card_number" name="card_number" pattern="[0-9]{16}" value="<?php echo $row['card_number'];?>" required disabled>
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -523,7 +557,7 @@ $conn -> close();
                             <div class="row mb-3">
                                 <label for="cvv" class="col-sm-4 col-form-label">CVV:</label>
                                 <div class="col-sm-8">
-                                    <input type="text" class="form-control focus-ring update_card<?php echo $i;?>" id="cvv" name="cvv" value="<?php echo $row['cvv'];?>" required disabled>
+                                    <input type="text" class="form-control focus-ring update_card<?php echo $i;?>" id="cvv" name="cvv" pattern="[0-9]{3}" value="<?php echo $row['cvv'];?>" required disabled>
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -583,7 +617,7 @@ $conn -> close();
                     <div class="row mb-3">
                         <label for="card_number" class="col-sm-4 col-form-label">Card Number:</label>
                         <div class="col-sm-8">
-                            <input type="text" class="form-control focus-ring" id="card_number" name="card_number" required>
+                            <input type="text" class="form-control focus-ring" id="card_number" name="card_number" pattern="[0-9]{16}" required>
                             <div class="invalid-feedback">
                                 Please enter a valid card number.
                             </div>
@@ -630,7 +664,7 @@ $conn -> close();
                     <div class="row mb-3">
                         <label for="cvv" class="col-sm-4 col-form-label">CVV:</label>
                         <div class="col-sm-8">
-                            <input type="text" class="form-control focus-ring" id="cvv" name="cvv" required >
+                            <input type="text" class="form-control focus-ring" id="cvv" name="cvv" pattern="[0-9]{3}" required >
                             <div class="invalid-feedback">
                                 Please enter a valid CVV.
                             </div>
@@ -695,15 +729,15 @@ $conn -> close();
                         </div>
                     </div>
                     <div class="row mb-3">
-                        <label for="new_password" class="col-sm-4 col-form-label">New Password:</label>
+                        <label for="new_password" class="col-sm-4 col-form-label">New Password (8-20):</label>
                         <div class="col-sm-8">
-                            <input type="password" class="form-control changePassword focus-ring" id="new_password" name="new_password" required disabled>
+                            <input type="password" class="form-control changePassword focus-ring" id="new_password" name="new_password" minlength="8" maxlength="20" required disabled>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <label for="confirm_new_pass" class="col-sm-4 col-form-label">Confirm New Password:</label>
                         <div class="col-sm-8">
-                            <input type="password" class="form-control changePassword focus-ring" id="confirm_new_pass" name="confirm_new_pass" required disabled>
+                            <input type="password" class="form-control changePassword focus-ring" id="confirm_new_pass" name="confirm_new_pass" minlength="8" maxlength="20" required disabled>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -729,10 +763,47 @@ $conn -> close();
         <a class="footer-nav footnav-black" href="register.php">Subscribe</a>&emsp;
         <a class="footer-nav footnav-black" href="about_us.php">About Us</a>&emsp;
         <a class="footer-nav footnav-black" href="terms_of_service.php" target="_blank">Terms of Service</a>&emsp;
-        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>
+        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>&emsp;
+        <!-- modal trigger -->
+        <a class="footer-nav footnav-black" href="#" data-bs-toggle="modal" data-bs-target="#exampleModal">Font Size</a>
         <br><br>
         <p>Copyright &copy; 2024 Sustain Energy. All rights reserved.</p>
-    </footer>
+    </footer>  
+    <!-- Modal -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Font Size</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-3" type="radio" name="flexRadioDefault" id="32px">
+                        <label class="form-check-label" for="32px" style="font-size:32px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-2" type="radio" name="flexRadioDefault" id="24px">
+                        <label class="form-check-label" for="24px" style="font-size:24px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input" type="radio" name="flexRadioDefault" id="16px" checked>
+                        <label class="form-check-label" for="16px" style="font-size:16px;">
+                            Example text
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-dark" onclick="change_font_size()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div> 
     <!-- Green Points purchase offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="purchaseOffcanvas" aria-labelledby="purchaseOffcanvasLabel">
         <div class="offcanvas-header">
@@ -802,7 +873,7 @@ $conn -> close();
                     <?php }
                 } ?>
                 <!-- loop end -->
-                <button type="submit" class="d-grid gap-2 col-12 mx-auto btn btn-dark mb-4" id="checkout" name="checkout">Checkout</button>
+                <button type="submit" class="d-grid gap-2 col-12 mx-auto btn btn-dark mb-4" id="checkout" name="checkout" <?php if($company['subscription'] == 'Deactivated') : ?>disabled<?php endif; ?>>Checkout</button>
             </form>
         </div>
     </div>
@@ -911,6 +982,8 @@ $conn -> close();
             </div>
         </div>
     </div>
+    <!-- changes the font size -->
+    <script src="font_size.js"></script>
     <!-- Controls the display of the search bar -->
     <script src="searchbar_display.js"></script>
     <!-- counts and outputs total price -->

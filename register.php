@@ -41,6 +41,7 @@ function register($conn) {
 
     $password = mysqli_real_escape_string($conn, trim($_POST['password']));
     $confirm_password = mysqli_real_escape_string($conn, trim($_POST['confirm_password']));
+    $otp = mysqli_real_escape_string($conn, trim($_POST['otp']));
 
     //Checks if passwords match
     if($password !== $confirm_password) {
@@ -52,8 +53,8 @@ function register($conn) {
 
     } else {
 
-        $stmt1 = $conn -> prepare("INSERT INTO users (company_name, contact_person, contact_number, registration_date, email, pass, street_address, city, postcode) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
-        $stmt1 -> bind_param("ssssssss", $company_name, $contact_person, $contact_number, $email, $hashed_password, $street_address, $city, $postcode);
+        $stmt1 = $conn -> prepare("INSERT INTO users (company_name, contact_person, contact_number, registration_date, email, pass, otp, street_address, city, postcode) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)");
+        $stmt1 -> bind_param("sssssssss", $company_name, $contact_person, $contact_number, $email, $hashed_password, $hashed_otp, $street_address, $city, $postcode);
     
         $stmt2 = $conn -> prepare("INSERT INTO payment_details (company_id, name_on_card, card_number, cvv, expiration_date, billing_address, billing_city, billing_postcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt2 -> bind_param("isssssss", $company_id, $name_on_card, $card_number, $cvv, $expiration_date, $billing_address, $billing_city, $billing_postcode);
@@ -63,6 +64,7 @@ function register($conn) {
         $contact_person = $_POST['contact_person'];
         $contact_number = $_POST['contact_number'];
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        $hashed_otp = password_hash($otp, PASSWORD_DEFAULT);
         $street_address = $_POST['street_address'];
         $city = $_POST['city'];
         $postcode = $_POST['postcode'];
@@ -78,23 +80,34 @@ function register($conn) {
         $billing_city = $_POST['billing_city'];
         $billing_postcode = $_POST['billing_postcode'];
 
-        $stmt1 -> execute();
+        $current_date = date('Y-m-d');
 
-        $company_id = $stmt1->insert_id;
+        if($current_date > $expiration_date) {
 
-        $stmt2 -> execute();
-
-        if ($stmt1->affected_rows > 0 && $stmt2->affected_rows > 0) {
-
-            header('Location: processing_payment.php');
-            exit();
-
-        } else {
             $msg = '<div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <i class="bi bi-exclamation-circle"></i> Error.
+                        <i class="bi bi-exclamation-circle"></i> Your card is expired.
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>';
-        }
+        } else {
+
+            $stmt1 -> execute();
+
+            $company_id = $stmt1->insert_id;
+
+            $stmt2 -> execute();
+
+            if ($stmt1->affected_rows > 0 && $stmt2->affected_rows > 0) {
+
+                header('Location: processing_payment.php');
+                exit();
+
+            } else {
+                $msg = '<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="bi bi-exclamation-circle"></i> Error.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>';
+            }
+        }   
     }
     return $msg;
 }
@@ -138,11 +151,11 @@ $conn -> close();
             <div class="row">
                 <h1 class="centered">Create Account</h1>
                 <br>
+                <?php if(isset($msg)) { ?>
+                    <?php echo $msg; ?>
+                <?php } ?>
                 <form method="post" class="row justify-content-center needs-validation" novalidate>
                     <div class="col-lg-4 col-md-7 col-10 my-5">
-                        <?php if(isset($msg)) { ?>
-                            <?php echo $msg; ?>
-                        <?php } ?>
                         <!-- Company details form -->
                         <h5>Company details</h5>
                         <div class="row mb-3">
@@ -164,7 +177,7 @@ $conn -> close();
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <input type="text" class="form-control focus-ring" id="contact_number" name="contact_number" placeholder="Contact number" required>
+                            <input type="text" class="form-control focus-ring" id="contact_number" name="contact_number" placeholder="Contact number" pattern="[0-9]{11}" required>
                             <div class="invalid-feedback">
                                 Please enter the contact number.
                             </div>
@@ -190,15 +203,21 @@ $conn -> close();
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <input type="password" class="form-control focus-ring" id="password" name="password" placeholder="Password" required>
+                            <input type="password" class="form-control focus-ring" id="password" name="password" placeholder="Password (8-20 characters)" minlength="8" maxlength="20" required>
                             <div class="invalid-feedback">
-                                Please enter a password.
+                                Please enter a password (8-20 characters).
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <input type="password" class="form-control focus-ring" id="confirm_password" name="confirm_password" placeholder="Confirm password" required>
+                            <input type="password" class="form-control focus-ring" id="confirm_password" name="confirm_password" placeholder="Confirm password (8-20 characters)" minlength="8" maxlength="20" required>
                             <div class="invalid-feedback">
-                                Please confirm the password.
+                                Please confirm the password (8-20 characters).
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <input type="password" class="form-control focus-ring" id="otp" name="otp" placeholder="Recover Password (8-number code)" pattern="[0-9]{8}" required>
+                            <div class="invalid-feedback">
+                                Please confirm the recovery password (8-number code).
                             </div>
                         </div>
                     </div>
@@ -213,14 +232,14 @@ $conn -> close();
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <input type="text" class="form-control focus-ring" id="card_number" name="card_number" placeholder="Card number" required>
+                            <input type="text" class="form-control focus-ring" id="card_number" name="card_number" placeholder="Card number" pattern="[0-9]{16}" required>
                             <div class="invalid-feedback">
                                 Please enter a valid card number.
                             </div>
                         </div>
                         <div class="row mb-5">
                             <div class="col-4 ps-0">
-                                <input type="text" class="form-control focus-ring" id="cvv" name="cvv" placeholder="CVV" required>
+                                <input type="text" class="form-control focus-ring" id="cvv" name="cvv" placeholder="CVV" pattern="[0-9]{3}" required>
                                 <div class="invalid-feedback">
                                     Please enter a valid CVV.
                                 </div>
@@ -318,10 +337,49 @@ $conn -> close();
         <a class="footer-nav footnav-white" href="#">Subscribe</a>&emsp;
         <a class="footer-nav footnav-white" href="about_us.php">About Us</a>&emsp;
         <a class="footer-nav footnav-white" href="terms_of_service.php" target="_blank">Terms of Service</a>&emsp;
-        <a class="footer-nav footnav-white" href="privacy_policy.php" target="_blank">Privacy Policy</a>
+        <a class="footer-nav footnav-white" href="privacy_policy.php" target="_blank">Privacy Policy</a>&emsp;
+        <!-- modal trigger -->
+        <a class="footer-nav footnav-white" href="#" data-bs-toggle="modal" data-bs-target="#exampleModal">Font Size</a>
         <br><br>
         <p>Copyright &copy; 2024 Sustain Energy. All rights reserved.</p>
-    </footer>   
+    </footer>  
+    <!-- Modal -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Font Size</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-3" type="radio" name="flexRadioDefault" id="32px">
+                        <label class="form-check-label" for="32px" style="font-size:32px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-2" type="radio" name="flexRadioDefault" id="24px">
+                        <label class="form-check-label" for="24px" style="font-size:24px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input" type="radio" name="flexRadioDefault" id="16px" checked>
+                        <label class="form-check-label" for="16px" style="font-size:16px;">
+                            Example text
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-dark" onclick="change_font_size()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div> 
+    <!-- changes the font size -->
+    <script src="font_size.js"></script> 
     <!-- Disables form submition is fields are empty or invalid -->
     <script src="form_validation.js"></script>
     <script>

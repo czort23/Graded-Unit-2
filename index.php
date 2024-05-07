@@ -2,8 +2,62 @@
 require 'connect_db.php'; //connects to the database
 require 'session_check.php'; //passes loggedIn() function, returns 'true' if a user is logged in, otherwise returns 'false'
 
+//resets the points back to 0 on 1st jan every year
+$current_date = date('Y-m-d');
+$reset_date = date('Y-01-01');
+
+if ($current_date == $reset_date) {
+    
+    // SQL query to reset the points column to 0
+    $sql = "UPDATE users SET points = 0";
+
+    $conn -> query($sql);
+}
+
+$sql0 = "SELECT company_id, registration_date, subscription FROM users";
+$result0 = $conn -> query($sql0);
+
+//sets inactive status to accounts without any organised events after 2 months from registering
+if ($result0 -> num_rows > 0) {
+    while ($row0 = $result0 -> fetch_array()) {
+
+        $company_ID = $row0['company_id'];
+        $registration_date = new DateTime($row0['registration_date']);
+        $sub_status = $row0['subscription'];
+
+        $sql = "SELECT event_id FROM events WHERE company_id = $company_ID";
+        $result = $conn -> query($sql);
+
+        if ($result -> num_rows > 0) {
+
+            if($sub_status == 'Inactive') {
+
+                // SQL query to set the subscription status to active if a company created an event and was previously inactive
+                $sql = "UPDATE users SET subscription = 'Active' WHERE company_id = $company_ID";
+
+                $conn -> query($sql);
+            }
+        } else {
+
+            //adds 2 months to the date
+            $registration_date->modify('+2 months');
+
+            // Get the new date
+            $inactive_deadline = $registration_date->format('Y-m-d');
+
+            if(($current_date >= $inactive_deadline) && ($sub_status == 'Active')) {
+
+                // SQL query to set the subscription status to inactive
+                $sql = "UPDATE users SET subscription = 'Inactive' WHERE company_id = $company_ID";
+
+                $conn -> query($sql);
+            }
+        }
+    }
+}
+
 //sql query for the navbar search bar
-$sql1 = "SELECT company_id, company_name FROM users";
+$sql1 = "SELECT company_id, company_name FROM users WHERE company_id != 1";
 $result1 = $conn -> query($sql1);
 
 if(loggedIn()) {
@@ -38,17 +92,26 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         } else {
 
-            $stmt1 = $conn -> prepare("UPDATE users SET points=? WHERE company_id = $company_id");
-            $stmt1 -> bind_param("s", $total_points);
+            $year = date('Y');
+            $reward_desc = $year . ' Certificate';
 
-            $stmt2 = $conn -> prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
-            $stmt2 -> bind_param("iiid", $company_id, $payment_id, $amount, $price);
-            
-            $stmt1 -> execute();
-            $stmt2 -> execute();
+            $stmt1 = $conn->prepare("UPDATE users SET points=? WHERE company_id=?");
+            $stmt1->bind_param("ii", $total_points, $company_id);
+            $stmt1->execute();
+
+            $stmt2 = $conn->prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
+            $stmt2->bind_param("iiid", $company_id, $payment_id, $amount, $price);
+            $stmt2->execute();
+
+            //retrieves the auto-generated order_id
+            $order_id = $conn->insert_id;
+
+            $stmt3 = $conn->prepare("INSERT INTO rewards (company_id, order_id, type, reward) VALUES (?, ?, 'certificate', ?)");
+            $stmt3->bind_param("iis", $company_id, $order_id, $reward_desc);
+            $stmt3->execute();
 
             $msg = '<div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account.
+                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account. Check out your <a href="company_details.php?company_id='.$company_id.'#rewards">REWARDS</a>!
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>';
         }
@@ -130,6 +193,9 @@ $conn -> close();
                             <i class="bi-person-circle" style="font-size: 1.25rem;" alt="My Account"></i>
                         </a>
                         <ul class="dropdown-menu">
+                            <?php if(isset($company_id) && ($company_id == 1)): ?>
+                                <li><a class="dropdown-item" href="admin_panel.php">Admin Panel</a></li>
+                            <?php endif; ?>
                             <li><a class="dropdown-item" href="account.php">Account</a></li>
                             <li><a class="dropdown-item" data-bs-toggle="offcanvas" href="#purchaseOffcanvas" role="button" aria-controls="purchaseOffcanvas">Purchase Points</a></li>
                             <li><a class="dropdown-item" href="order_history.php">Order History</a></li>
@@ -213,62 +279,86 @@ $conn -> close();
                 <div class="carousel-inner" role="listbox">
                     <div class="carousel-item active">
                         <div class="col-md-3">
-                            <img src="images/ecoatlas_innovations.png" class="d-block carousel-image" alt="ecoatlas innovations company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/ecoatlas_innovations.png" class="d-block carousel-image" alt="ecoatlas innovations company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/ecoimpact_dynamics.png" class="d-block carousel-image" alt="ecoimpact dynamics company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/edinburgh_college.png" class="d-block carousel-image" alt="edinburgh college company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/ecosphere_strategies.png" class="d-block carousel-image" alt="ecosphere strategies company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/ecoimpact_dynamics.png" class="d-block carousel-image" alt="ecoimpact dynamics company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/green_harmony.png" class="d-block carousel-image" alt="green harmony company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/ecosphere_strategies.png" class="d-block carousel-image" alt="ecosphere strategies company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/evergreen.png" class="d-block carousel-image" alt="evergreen company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/green_harmony.png" class="d-block carousel-image" alt="green harmony company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/green_alliance.png" class="d-block carousel-image" alt="green alliance company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/evergreen.png" class="d-block carousel-image" alt="evergreen company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/greenhorizon_governance.png" class="d-block carousel-image" alt="greenhorizon governance company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/green_alliance.png" class="d-block carousel-image" alt="green alliance company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/resilient_earth.png" class="d-block carousel-image" alt="resilient earth company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/resilient_earth.png" class="d-block carousel-image" alt="resilient earth company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/ecowise.png" class="d-block carousel-image" alt="ecowise company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/ecowise.png" class="d-block carousel-image" alt="ecowise company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/greenhorizon_solutions.png" class="d-block carousel-image" alt="greenhorizon solutions company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/greenhorizon_solutions.png" class="d-block carousel-image" alt="greenhorizon solutions company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/sustainablefuture.png" class="d-block carousel-image" alt="sustainablefuture company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/sustainablefuture.png" class="d-block carousel-image" alt="sustainablefuture company logo">
+                            </a>
                         </div>
                     </div>
                     <div class="carousel-item">
                         <div class="col-md-3">
-                            <img src="images/terravanguard.png" class="d-block carousel-image" alt="terravanguard company logo">
+                            <a href="https://www.edinburghcollege.ac.uk/" target="_blank">
+                                <img src="images/terravanguard.png" class="d-block carousel-image" alt="terravanguard company logo">
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -288,10 +378,47 @@ $conn -> close();
         <a class="footer-nav footnav-black" href="register.php">Subscribe</a>&emsp;
         <a class="footer-nav footnav-black" href="about_us.php">About Us</a>&emsp;
         <a class="footer-nav footnav-black" href="terms_of_service.php" target="_blank">Terms of Service</a>&emsp;
-        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>
+        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>&emsp;
+        <!-- modal trigger -->
+        <a class="footer-nav footnav-black" href="#" data-bs-toggle="modal" data-bs-target="#exampleModal">Font Size</a>
         <br><br>
         <p>Copyright &copy; 2024 Sustain Energy. All rights reserved.</p>
-    </footer>   
+    </footer>  
+    <!-- Modal -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Font Size</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-3" type="radio" name="flexRadioDefault" id="32px">
+                        <label class="form-check-label" for="32px" style="font-size:32px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-2" type="radio" name="flexRadioDefault" id="24px">
+                        <label class="form-check-label" for="24px" style="font-size:24px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input" type="radio" name="flexRadioDefault" id="16px" checked>
+                        <label class="form-check-label" for="16px" style="font-size:16px;">
+                            Example text
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-dark" onclick="change_font_size()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div> 
     <!-- Green Points purchase offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="purchaseOffcanvas" aria-labelledby="purchaseOffcanvasLabel">
         <div class="offcanvas-header">
@@ -366,6 +493,8 @@ $conn -> close();
         </div>
     </div>
     <!-- Offcanvas end -->
+    <!-- changes the font size -->
+    <script src="font_size.js"></script>
     <!-- Adds a wrap functionality to the carousel -->
     <script src="carousel_wrap.js"></script>
     <!-- Controls the display of the search bar -->

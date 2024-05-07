@@ -3,7 +3,7 @@ require 'connect_db.php'; //connects to the database
 require 'session_check.php'; //passes loggedIn() function, returns 'true' if a user is logged in, otherwise returns 'false'
 
 //sql query for the navbar search bar
-$sql1 = "SELECT company_id, company_name FROM users";
+$sql1 = "SELECT company_id, company_name FROM users WHERE company_id != 1";
 $result1 = $conn -> query($sql1);
 
 if(loggedIn()) {
@@ -44,17 +44,26 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         } else {
 
-            $stmt1 = $conn -> prepare("UPDATE users SET points=? WHERE company_id = $company_id");
-            $stmt1 -> bind_param("s", $total_points);
+            $year = date('Y');
+            $reward_desc = $year . ' Certificate';
 
-            $stmt2 = $conn -> prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
-            $stmt2 -> bind_param("iiid", $company_id, $payment_id, $amount, $price);
-            
-            $stmt1 -> execute();
-            $stmt2 -> execute();
+            $stmt1 = $conn->prepare("UPDATE users SET points=? WHERE company_id=?");
+            $stmt1->bind_param("ii", $total_points, $company_id);
+            $stmt1->execute();
+
+            $stmt2 = $conn->prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
+            $stmt2->bind_param("iiid", $company_id, $payment_id, $amount, $price);
+            $stmt2->execute();
+
+            //retrieves the auto-generated order_id
+            $order_id = $conn->insert_id;
+
+            $stmt3 = $conn->prepare("INSERT INTO rewards (company_id, order_id, type, reward) VALUES (?, ?, 'certificate', ?)");
+            $stmt3->bind_param("iis", $company_id, $order_id, $reward_desc);
+            $stmt3->execute();
 
             $msg = '<div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account.
+                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account. Check out your <a href="company_details.php?company_id='.$company_id.'#rewards">REWARDS</a>!
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>';
         }
@@ -156,6 +165,9 @@ $conn -> close();
                             <i class="bi-person-circle" style="font-size: 1.25rem;" alt="My Account"></i>
                         </a>
                         <ul class="dropdown-menu">
+                            <?php if(isset($company_id) && ($company_id == 1)): ?>
+                                <li><a class="dropdown-item" href="admin_panel.php">Admin Panel</a></li>
+                            <?php endif; ?>
                             <li><a class="dropdown-item" href="account.php">Account</a></li>
                             <li><a class="dropdown-item" data-bs-toggle="offcanvas" href="#purchaseOffcanvas" role="button" aria-controls="purchaseOffcanvas">Purchase Points</a></li>
                             <li><a class="dropdown-item" href="order_history.php">Order History</a></li>
@@ -176,14 +188,16 @@ $conn -> close();
         <?php if(isset($msg)) { ?>
             <?php echo $msg; ?>
         <?php } ?>
+        <?php if(isset($company_id)) : ?>
         <form method="post" class="row g-3 needs-validation mb-5" novalidate>
             <label for="feedback" class="form-label mb-0"><h4>Leave feedback:</h4></label>
-            <textarea class="form-control focus-ring mt-0" id="feedback" name="feedback" placeholder="Type your feedback here..." required></textarea>
+            <textarea class="form-control focus-ring mt-0" id="feedback" name="feedback" placeholder="Type your feedback here..." minlength="15" required></textarea>
             <div class="invalid-feedback">
-                Please type in your feedback.
+                Please type in your feedback min. 15 characters.
             </div>
-            <button type="submit" class="btn btn-dark d-grid gap-2 col-sm-2 ms-auto" id="feedback-submit" name="feedback-submit" <?php if(!loggedIn()) echo 'disabled'; ?> >Post</button>
+            <button type="submit" class="btn btn-dark d-grid gap-2 col-sm-2 ms-auto" id="feedback-submit" name="feedback-submit">Post</button>
         </form>
+        <?php endif; ?>
         <h2>Feedbacks</h2>
         <div class="row justify-content-center">
             <div class="col-12">
@@ -203,7 +217,7 @@ $conn -> close();
                                     <div class="col-4 col-lg-2">
                                         <div class="card-body">
                                             <?php if(loggedIn()) : ?>
-                                                <?php if($company_id == $row['company_id']) : ?>
+                                                <?php if(($company_id == $row['company_id']) || ($company_id == 1)) : ?>
                                                 <form method="post" class="needs-validation" novalidate>
                                                     <input type="hidden" name="feedback_id" value="<?php echo $row['feedback_id']; ?>" required>
                                                     <button type="submit" class="btn btn-outline-danger float-end" id="delete" name="delete">
@@ -236,10 +250,47 @@ $conn -> close();
         <a class="footer-nav footnav-black" href="register.php">Subscribe</a>&emsp;
         <a class="footer-nav footnav-black" href="about_us.php">About Us</a>&emsp;
         <a class="footer-nav footnav-black" href="terms_of_service.php" target="_blank">Terms of Service</a>&emsp;
-        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>
+        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>&emsp;
+        <!-- modal trigger -->
+        <a class="footer-nav footnav-black" href="#" data-bs-toggle="modal" data-bs-target="#exampleModal">Font Size</a>
         <br><br>
         <p>Copyright &copy; 2024 Sustain Energy. All rights reserved.</p>
-    </footer>      
+    </footer>  
+    <!-- Modal -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Font Size</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-3" type="radio" name="flexRadioDefault" id="32px">
+                        <label class="form-check-label" for="32px" style="font-size:32px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-2" type="radio" name="flexRadioDefault" id="24px">
+                        <label class="form-check-label" for="24px" style="font-size:24px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input" type="radio" name="flexRadioDefault" id="16px" checked>
+                        <label class="form-check-label" for="16px" style="font-size:16px;">
+                            Example text
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-dark" onclick="change_font_size()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>      
     <!-- Green Points purchase offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="purchaseOffcanvas" aria-labelledby="purchaseOffcanvasLabel">
         <div class="offcanvas-header">
@@ -314,6 +365,8 @@ $conn -> close();
         </div>
     </div>
     <!-- Offcanvas end -->
+    <!-- changes the font size -->
+    <script src="font_size.js"></script>
     <!-- Controls the display of the search bar -->
     <script src="searchbar_display.js"></script>
     <!-- counts and outputs total price -->

@@ -12,20 +12,20 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if(isset($_POST['login'])) {
 
-        $msg = login($conn);
+        $msg = reset_password($conn);
     } 
 }
 
 //login function, checks if email and password match, returns error if input is incorrect
-function login($conn) {
+function reset_password($conn) {
     
     $msg = null;
 
     $email = $_POST['email'];
-    $password = $_POST['password'];
+    $otp = $_POST['otp'];
 
     //select details from database where email (database) equals email (user input)
-    $stmt = $conn->prepare("SELECT company_id, email, pass FROM users WHERE email = ?");
+    $stmt = $conn->prepare("SELECT company_id, email, otp FROM users WHERE email = ?");
     $stmt -> bind_param("s", $email);
     $stmt -> execute();
     $result = $stmt -> get_result();
@@ -35,10 +35,9 @@ function login($conn) {
 
         $user = $result -> fetch_array();
 
-        if(password_verify($password, $user['pass'])) {
+        if(password_verify($otp, $user['otp'])) {
 
-            $_SESSION['user_id'] = $user['company_id'];
-            header('Location: index.php');
+            header('Location: reset_password.php?company_id=' . $user['company_id']);
             exit();
 
         } else {
@@ -66,22 +65,13 @@ $conn -> close();
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="authour" content="Adrian Zalubski">
-    <title>Sustain Energy - Login</title>
+    <title>Sustain Energy - Forgot Password</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- CSS -->
     <link rel="stylesheet" href="styles/stylesheet.css"> 
-    <style>
-       /* body {
-            background-image: url("images/pexels-pixabay-45222.jpg");
-            background-repeat: no-repeat;
-            background-position: center;
-            height: 100vh;
-            background-size: cover;
-        }*/
-    </style>
 </head>
 <body>
     <!-- Navbar start -->
@@ -95,38 +85,25 @@ $conn -> close();
     <section id="login">
         <div class="container">
             <br><br><br><br><br><br>
-            <div class="row justify-content-center">
-                <div class="col-lg-4 col-md-6 col-10 mt-5">
-                    <h1 class="centered">Welcome Back</h1>
-                    <br>
+            <div class="row justify-content-center my-5">
+                <div class="col-lg-4 col-md-6 col-10 my-5">
                     <?php if(isset($msg)) { ?>
                         <?php echo $msg; ?>
                     <?php } ?>
+                    <h4>Enter your email</h4>
                     <form method="post" class="row g-3 needs-validation" novalidate>
                         <input type="email" class="form-control focus-ring" id="email" name="email" placeholder="Email" required>
                         <div class="invalid-feedback">
                             Please enter a valid email.
                         </div>
-                        <input type="password" class="form-control focus-ring" id="password" name="password" placeholder="Password" required>
+                        <input type="password" class="form-control focus-ring" id="otp" name="otp" placeholder="Recover password" required>
                         <div class="invalid-feedback">
-                            Please enter a password.
+                            Please enter your recover password.
                         </div>
-                        <button type="submit" class="btn btn-dark" id="login" name="login">Log in</button>
+                        <button type="submit" class="btn btn-dark" id="login" name="login">Reset password</button>
                     </form>
                 </div>
             </div>
-            <div class="row justify-content-center">
-                <div class="col-lg-4 col-md-6 col-10 mt-2">
-                    <a href="forgot_password.php">Forgot password?</a>
-                    <hr>
-                </div>
-            </div>
-            <div class="row justify-content-center">
-                <div class="col-lg-4 col-md-6 col-10 mb-5">
-                    <a href="register.php">Don't have an account yet?</a>
-                </div>
-            </div>
-        </div>
     </section>
     <!-- Main end -->
     <hr>
@@ -176,9 +153,9 @@ $conn -> close();
                 </div>
             </div>
         </div>
-    </div> 
+    </div>  
     <!-- changes the font size -->
-    <script src="font_size.js"></script> 
+    <script src="font_size.js"></script>
     <!-- Disables form submition is fields are empty or invalid -->
     <script src="form_validation.js"></script>
     <!-- Bootstrap JS -->

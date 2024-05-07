@@ -2,8 +2,52 @@
 require 'connect_db.php'; //connects to the database
 require 'session_check.php'; //passes loggedIn() function, returns 'true' if a user is logged in, otherwise returns 'false'
 
+$current_date = date('Y-m-d');
+
+$sql0 = "SELECT company_id, registration_date, subscription FROM users";
+$result0 = $conn -> query($sql0);
+
+//sets inactive status to accounts without any organised events after 2 months from registering
+if ($result0 -> num_rows > 0) {
+    while ($row0 = $result0 -> fetch_array()) {
+
+        $company_ID = $row0['company_id'];
+        $registration_date = new DateTime($row0['registration_date']);
+        $sub_status = $row0['subscription'];
+
+        $sql = "SELECT event_id FROM events WHERE company_id = $company_ID";
+        $result = $conn -> query($sql);
+
+        if ($result -> num_rows > 0) {
+
+            if($sub_status == 'Inactive') {
+
+                // SQL query to set the subscription status to active if a company created an event and was previously inactive
+                $sql = "UPDATE users SET subscription = 'Active' WHERE company_id = $company_ID";
+
+                $conn -> query($sql);
+            }
+        } else {
+
+            //adds 2 months to the date
+            $registration_date->modify('+2 months');
+
+            // Get the new date
+            $inactive_deadline = $registration_date->format('Y-m-d');
+
+            if(($current_date >= $inactive_deadline) && ($sub_status == 'Active')) {
+
+                // SQL query to set the subscription status to inactive
+                $sql = "UPDATE users SET subscription = 'Inactive' WHERE company_id = $company_ID";
+
+                $conn -> query($sql);
+            }
+        }
+    }
+}
+
 //sql query for the navbar search bar
-$sql1 = "SELECT company_id, company_name FROM users";
+$sql1 = "SELECT company_id, company_name FROM users WHERE company_id != 1";
 $result1 = $conn -> query($sql1);
 
 if(loggedIn()) {
@@ -23,7 +67,7 @@ if(isset($_GET['company_id'])) {
     $sql3 = "SELECT * FROM users WHERE company_id = $company_details_id";
     $result3 = $conn -> query($sql3);
 
-    $sql4 = "SELECT reward FROM rewards WHERE company_id = $company_details_id";
+    $sql4 = "SELECT reward_id, type, reward FROM rewards WHERE company_id = $company_details_id";
     $result4 = $conn -> query($sql4);
 
     if($result3 -> num_rows > 0) {
@@ -79,17 +123,26 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         } else {
 
-            $stmt1 = $conn -> prepare("UPDATE users SET points=? WHERE company_id = $company_id");
-            $stmt1 -> bind_param("s", $total_points);
+            $year = date('Y');
+            $reward_desc = $year . ' Certificate';
 
-            $stmt2 = $conn -> prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
-            $stmt2 -> bind_param("iiid", $company_id, $payment_id, $amount, $price);
-            
-            $stmt1 -> execute();
-            $stmt2 -> execute();
+            $stmt1 = $conn->prepare("UPDATE users SET points=? WHERE company_id=?");
+            $stmt1->bind_param("ii", $total_points, $company_id);
+            $stmt1->execute();
+
+            $stmt2 = $conn->prepare("INSERT INTO orders (company_id, payment_id, amount, price, order_date) VALUES (?, ?, ?, ?, NOW())");
+            $stmt2->bind_param("iiid", $company_id, $payment_id, $amount, $price);
+            $stmt2->execute();
+
+            //retrieves the auto-generated order_id
+            $order_id = $conn->insert_id;
+
+            $stmt3 = $conn->prepare("INSERT INTO rewards (company_id, order_id, type, reward) VALUES (?, ?, 'certificate', ?)");
+            $stmt3->bind_param("iis", $company_id, $order_id, $reward_desc);
+            $stmt3->execute();
 
             $msg = '<div class="alert alert-success alert-dismissible fade show" role="alert">
-                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account.
+                        <i class="bi bi-check-circle"></i> Purchase successful, '.$amount.' points added to your account. Check out your <a href="company_details.php?company_id='.$company_id.'#rewards">REWARDS</a>!
                         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>';
         }
@@ -171,6 +224,9 @@ $conn -> close();
                             <i class="bi-person-circle" style="font-size: 1.25rem;" alt="My Account"></i>
                         </a>
                         <ul class="dropdown-menu">
+                            <?php if(isset($company_id) && ($company_id == 1)): ?>
+                                <li><a class="dropdown-item" href="admin_panel.php">Admin Panel</a></li>
+                            <?php endif; ?>
                             <li><a class="dropdown-item" href="account.php">Account</a></li>
                             <li><a class="dropdown-item" data-bs-toggle="offcanvas" href="#purchaseOffcanvas" role="button" aria-controls="purchaseOffcanvas">Purchase Points</a></li>
                             <li><a class="dropdown-item" href="order_history.php">Order History</a></li>
@@ -233,8 +289,9 @@ $conn -> close();
                 <div class="progress" role="progressbar" aria-label="Success example" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
                     <div class="progress-bar bg-success" style="width: <?php echo $company_details['points'];?>%"><?php echo $company_details['points'];?>/100</div>
                 </div>
-                <br>
-                <h3>Rewards</h3><br>
+            </div>
+            <div class="col-10 col-md-9 my-5">
+                <h3 id="rewards">Trophies</h3><br>
                 <?php if ($result4 -> num_rows > 0) {
                     while ($company_details = $result4->fetch_array()) {
                         $rows[] = $company_details;
@@ -242,10 +299,26 @@ $conn -> close();
 
                     $rows = array_reverse($rows);
 
-                    foreach ($rows as $row) { ?>
-                        <img src="<?php echo $row['reward'];?>" class="img-fluid" style="max-width:125px" alt="trophy">
-                    <?php } 
-                } ?>
+                    foreach ($rows as $row) { 
+                        if($row['type'] == 'trophy') { ?>
+                            <img src="<?php echo $row['reward'];?>" class="img-fluid" style="max-width:125px" alt="trophy">
+                    <?php }
+                    } 
+                } else { ?>
+                    <p>Nothing here yet.</p>
+                <?php } ?>
+            </div>
+            <div class="col-10 col-md-2 my-5">
+                <h3>Certificates</h3><br>
+                <?php if ($result4 -> num_rows > 0) {
+                    foreach ($rows as $row) { 
+                        if($row['type'] == 'certificate') { ?>
+                            <p><a href="certificate.php?reward_id=<?php echo $row['reward_id'];?>" target="_blank"><?php echo $row['reward'];?></a></p>
+                    <?php }
+                    } 
+                } else { ?>
+                    <p>Nothing here yet.</p>
+                <?php } ?>
             </div>
         </div>
         <div class="row justify-content-center">
@@ -256,9 +329,9 @@ $conn -> close();
                     <h5>Add Event</h5>
                     <form method="post" class="row g-3 needs-validation my-2" novalidate>
                         <div class="col-10">
-                            <input type="text" class="form-control focus-ring" id="event_name" name="event_name" placeholder="Name of the Event" required>
+                            <input type="text" class="form-control focus-ring" id="event_name" name="event_name" placeholder="Name of the Event" minlength="10" required>
                             <div class="invalid-feedback">
-                                Please enter a valid name of the event.
+                                Please enter a valid name of the event, min. 10 characters.
                             </div>
                         </div>
                         <div class="col-2">
@@ -268,9 +341,9 @@ $conn -> close();
                             </div>
                         </div>
                         <div class="col-12">
-                            <textarea class="form-control focus-ring" id="description" name="description" placeholder="Describe the event here here..." required></textarea>
+                            <textarea class="form-control focus-ring" id="description" name="description" placeholder="Describe the event here here..." minlength="50" required></textarea>
                             <div class="invalid-feedback">
-                                Please type in the description.
+                                Please type in the description, min. 50 characters.
                             </div>
                         </div>
                         <button type="submit" class="btn btn-dark d-grid gap-2 col-sm-2 ms-auto" id="add_event" name="add_event">Add</button>
@@ -291,7 +364,7 @@ $conn -> close();
                             </div>
                             <div class="card-body">
                                 <?php if(loggedIn()) : ?>
-                                    <?php if($company_id == $event['company_id']) : ?>
+                                    <?php if(($company_id == $event['company_id']) || ($company_id == 1)) : ?>
                                     <form method="post" class="needs-validation" novalidate>
                                         <input type="hidden" name="event_id" value="<?php echo $event['event_id']; ?>" required>
                                         <button type="submit" class="btn btn-outline-danger float-end" id="delete" name="delete">
@@ -317,12 +390,49 @@ $conn -> close();
         <a class="footer-nav footnav-black" href="register.php">Subscribe</a>&emsp;
         <a class="footer-nav footnav-black" href="about_us.php">About Us</a>&emsp;
         <a class="footer-nav footnav-black" href="terms_of_service.php" target="_blank">Terms of Service</a>&emsp;
-        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>
+        <a class="footer-nav footnav-black" href="privacy_policy.php" target="_blank">Privacy Policy</a>&emsp;
+        <!-- modal trigger -->
+        <a class="footer-nav footnav-black" href="#" data-bs-toggle="modal" data-bs-target="#exampleModal">Font Size</a>
         <br><br>
         <a class="footer-nav footnav-black" href="https://www.flaticon.com/free-icons/trophy" title="gold cup icons" target="_blank">Trophy icons created by Freepik - Flaticon</a>
         <br><br>
         <p>Copyright &copy; 2024 Sustain Energy. All rights reserved.</p>
-    </footer>   
+    </footer>  
+    <!-- Modal -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Font Size</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-3" type="radio" name="flexRadioDefault" id="32px">
+                        <label class="form-check-label" for="32px" style="font-size:32px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input my-2" type="radio" name="flexRadioDefault" id="24px">
+                        <label class="form-check-label" for="24px" style="font-size:24px;">
+                            Example text
+                        </label>
+                    </div>
+                    <div class="form-check font_size my-2">
+                        <input class="form-check-input" type="radio" name="flexRadioDefault" id="16px" checked>
+                        <label class="form-check-label" for="16px" style="font-size:16px;">
+                            Example text
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-dark" onclick="change_font_size()">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>    
     <!-- Green Points purchase offcanvas -->
     <div class="offcanvas offcanvas-end" tabindex="-1" id="purchaseOffcanvas" aria-labelledby="purchaseOffcanvasLabel">
         <div class="offcanvas-header">
@@ -397,8 +507,8 @@ $conn -> close();
         </div>
     </div>
     <!-- Offcanvas end -->
-    <!-- Adds a wrap functionality to the carousel -->
-    <script src="carousel_wrap.js"></script>
+    <!-- changes the font size -->
+    <script src="font_size.js"></script>
     <!-- Controls the display of the search bar -->
     <script src="searchbar_display.js"></script>
     <!-- counts and outputs total price -->
